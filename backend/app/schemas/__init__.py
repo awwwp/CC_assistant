@@ -1,3 +1,10 @@
+from app.schemas.calendar import (
+    CalendarItem,
+    CalendarResponse,
+    CalendarTaskStatus,
+    EventCalendarItem,
+    TaskCalendarItem,
+)
 from app.schemas.event import EventCreate, EventRead, EventUpdate
 from app.schemas.recurrence import (
     CheckinRequest,
@@ -24,4 +31,9 @@ __all__ = [
     "TaskInstanceRead",
     "TaskInstanceStatus",
     "CompletionLogRead",
+    "CalendarResponse",
+    "CalendarItem",
+    "CalendarTaskStatus",
+    "EventCalendarItem",
+    "TaskCalendarItem",
 ]

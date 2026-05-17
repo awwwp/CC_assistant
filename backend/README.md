@@ -31,7 +31,7 @@ backend/
 - ✅ Slice 1：骨架 + `tags` CRUD
 - ✅ Slice 2：`events` + `event_tags`（一次性事件 + 多标签）
 - ✅ Slice 3：`recurrence_rules` + `task_instances` + `task_completion_log`（周期任务 / 打卡 / 日记）
-- ⬜ Slice 4：日历渲染（RRULE 展开 + 合并 events）
+- ✅ Slice 4：`/api/calendar` 日历渲染（RRULE 展开 + 合并 events）
 - ⬜ Slice 5：food_items + meal_templates
 - ⬜ Slice 6：daily_meal_plans + day_type 推断 + 自动生成
 
@@ -171,6 +171,60 @@ uvicorn app.main:app --reload
 8. `GET /api/rules/series/{series_id}` → 看到该 series 下所有版本（按 `dtstart` 升序）
 
 注意 slice 3 还没有「日历渲染」接口（RRULE 在某月份的展开 + 合并 events）——那是 slice 4。当前阶段只能通过 `GET /api/rules/{id}/instances` 看已被触动的具体日期记录，还看不到未打卡的「该出现但还没动」的待办格子。
+
+**Calendar render（slice 4）**
+
+把 slice 2 的 events 和 slice 3 的周期任务统一成「某月每天有什么」。前端日历视图的主要数据源。
+
+1. `GET /api/calendar?start=2026-05-01&end=2026-05-31`
+
+   响应结构：
+
+   ```json
+   {
+     "start": "2026-05-01",
+     "end": "2026-05-31",
+     "days": {
+       "2026-05-03": [
+         {
+           "type": "task",
+           "rule_id": 1,
+           "series_id": "abc-...",
+           "occurrence_date": "2026-05-03",
+           "title": "打羽毛球",
+           "rrule": "FREQ=WEEKLY;BYDAY=SU",
+           "time_of_day": "18:00:00",
+           "duration_minutes": 90,
+           "tag": { "id": 1, "name": "运动", "color": "#22C55E" },
+           "status": "pending",
+           "completed_at": null,
+           "undone_at": null,
+           "instance_id": null
+         }
+       ],
+       "2026-05-10": [
+         { "type": "task", ..., "status": "completed", "instance_id": 7 }
+       ],
+       "2026-05-12": [
+         { "type": "event", "id": 1, "title": "出发去旅游", "tags": [...], ... }
+       ]
+     }
+   }
+   ```
+
+   - 空的日期不出现在 `days` 里
+   - 同一天内：events 按 `start_at` 时间排序在前，tasks 按 `time_of_day` 排序在后（全天 / 未设时间排到最后）
+   - `instance_id` 为 null 表示该格子还没被打卡过（前端可以判断 "POST checkin 会新建一行 task_instance"）
+
+2. 范围校验：
+   - `start > end` → 400
+   - `end - start > 366 天` → 400（防止 RRULE 在极大窗口爆炸）
+
+3. 检查 slice 3 改规则后日历的反映：
+   - 把"周日打羽毛球"改成"周六"，`effective_from = 下周一` → 当前周还是周日，下周开始变周六
+   - 软删除规则 → 当前以前的日期保留待办格，未来的格子消失
+
+注意「过去不变」的体现：即使你修改/软删了规则，过去日期的 `/api/calendar` 输出**不会变化**（因为旧版本规则的 `dtend` 截断保留了过去的展开能力）。
 
 ## 数据库管理
 
