@@ -30,9 +30,10 @@ backend/
 
 - ✅ Slice 1：骨架 + `tags` CRUD
 - ✅ Slice 2：`events` + `event_tags`（一次性事件 + 多标签）
-- ⬜ Slice 3：recurrence_rules + task_instances + task_completion_log + 日历渲染
-- ⬜ Slice 4：food_items + meal_templates
-- ⬜ Slice 5：daily_meal_plans + day_type 推断 + 自动生成
+- ✅ Slice 3：`recurrence_rules` + `task_instances` + `task_completion_log`（周期任务 / 打卡 / 日记）
+- ⬜ Slice 4：日历渲染（RRULE 展开 + 合并 events）
+- ⬜ Slice 5：food_items + meal_templates
+- ⬜ Slice 6：daily_meal_plans + day_type 推断 + 自动生成
 
 ## 首次环境搭建（Anaconda + pip）
 
@@ -130,6 +131,46 @@ uvicorn app.main:app --reload
 5. `DELETE /api/events/{id}` 软删除
 
 也可用 DBeaver 连 `backend/cc_assistant.db` 直接看 `events` / `event_tags` 表。
+
+**Recurrence rules / instances / completion log（slice 3）**
+
+需要先有至少一个 tag。
+
+1. `POST /api/rules` 创建一条周期任务规则：
+
+   ```json
+   {
+     "title": "打羽毛球",
+     "rrule": "FREQ=WEEKLY;BYDAY=SU",
+     "dtstart": "2026-01-01",
+     "time_of_day": "18:00:00",
+     "duration_minutes": 90,
+     "category": "exercise",
+     "tag_id": 1
+   }
+   ```
+
+   注意返回的 `series_id` —— 这是该任务跨规则版本的稳定身份。
+
+2. `POST /api/rules/{rule_id}/instances/2026-05-10/checkin`，body 可省略或传 `{"notes":"打了三局"}` → 返回 `TaskInstanceRead`，`status` 应为 `completed`，`completed_at` 已填
+
+3. 同一个日期再 checkin 一次 → **409 conflict**（一次性写入约束）
+
+4. `POST /api/rules/{rule_id}/instances/2026-05-10/undo` → `status` 变 `withdrawn`，`undone_at` 已填
+
+5. 再 undo 一次、或对未打卡的日期 undo → **409 conflict**
+
+6. `GET /api/completion-log?series_id={步骤 1 返回的 series_id}` → 返回那条 5/10 的日记（即使你 undo 了，日记不会删）
+
+7. `PATCH /api/rules/{rule_id}`：
+   - 只改 `title`（纯外观） → 原地更新
+   - 改 `rrule` 不传 `effective_from` → **422**
+   - 改 `rrule` 且 `effective_from` ≤ today → **422**
+   - 改 `rrule` 且 `effective_from` 是未来日期 → 切版本，返回新规则；旧规则的 `dtend` 被截断为 `effective_from - 1`，新旧规则同 `series_id`
+
+8. `GET /api/rules/series/{series_id}` → 看到该 series 下所有版本（按 `dtstart` 升序）
+
+注意 slice 3 还没有「日历渲染」接口（RRULE 在某月份的展开 + 合并 events）——那是 slice 4。当前阶段只能通过 `GET /api/rules/{id}/instances` 看已被触动的具体日期记录，还看不到未打卡的「该出现但还没动」的待办格子。
 
 ## 数据库管理
 
