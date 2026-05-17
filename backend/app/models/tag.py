@@ -1,10 +1,13 @@
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, String, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
+
+if TYPE_CHECKING:
+    from app.models.event import Event
 
 
 class Tag(Base):
@@ -22,4 +25,10 @@ class Tag(Base):
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
+    )
+
+    events: Mapped[list["Event"]] = relationship(
+        secondary="event_tags",
+        back_populates="tags",
+        lazy="selectin",
     )

@@ -29,7 +29,7 @@ backend/
 ## 当前进度
 
 - ✅ Slice 1：骨架 + `tags` CRUD
-- ⬜ Slice 2：events + event_tags
+- ✅ Slice 2：`events` + `event_tags`（一次性事件 + 多标签）
 - ⬜ Slice 3：recurrence_rules + task_instances + task_completion_log + 日历渲染
 - ⬜ Slice 4：food_items + meal_templates
 - ⬜ Slice 5：daily_meal_plans + day_type 推断 + 自动生成
@@ -90,9 +90,11 @@ uvicorn app.main:app --reload
 
 `--reload` 让代码改动自动重启。
 
-### 验证 Tag CRUD 走通
+### 验证 CRUD 走通
 
 在 http://localhost:8000/docs 里：
+
+**Tags（slice 1）**
 
 1. `POST /api/tags` 创建一个标签：
 
@@ -105,7 +107,29 @@ uvicorn app.main:app --reload
 4. `DELETE /api/tags/{id}` 软删除
 5. `GET /api/tags` 应返回空数组（软删除已生效，但 DB 里行还在）
 
-也可用 DBeaver 连 `backend/cc_assistant.db` 直接看 `tags` 表，确认 `deleted_at` 被填上。
+**Events（slice 2）**
+
+需要先有至少一个 tag。
+
+1. `POST /api/events` 创建一个一次性事件：
+
+   ```json
+   {
+     "title": "出发去旅游",
+     "description": "上海 -> 杭州",
+     "start_at": "2026-06-12T09:00:00Z",
+     "end_at": "2026-06-15T18:00:00Z",
+     "is_all_day": false,
+     "tag_ids": [1]
+   }
+   ```
+
+2. `GET /api/events` 返回所有事件（含完整 tag 信息）
+3. `GET /api/events?start=2026-06-01T00:00:00Z&end=2026-06-30T23:59:59Z` 按时间范围查
+4. `PATCH /api/events/{id}` 改 `tag_ids` 或时间。注意：`tag_ids` 字段省略 = 不动；传 `[]` = 清空；传新数组 = 整体替换
+5. `DELETE /api/events/{id}` 软删除
+
+也可用 DBeaver 连 `backend/cc_assistant.db` 直接看 `events` / `event_tags` 表。
 
 ## 数据库管理
 
